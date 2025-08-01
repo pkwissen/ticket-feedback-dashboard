@@ -11,9 +11,9 @@ xlsxwriter
 scikit-learn
 transformers==4.54.1
 torch
-
+langchain-community==0.3.21
 # Topic Modeling
-bertopic
+bertopic==0.17.3
 
 # Optional: Visualization
 matplotlib
