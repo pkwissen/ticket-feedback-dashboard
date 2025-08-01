@@ -1,0 +1,19 @@
+# Core App
+streamlit
+pandas
+numpy
+
+# Excel Support
+openpyxl
+xlsxwriter
+
+# Text Processing & ML
+scikit-learn
+transformers
+torch
+
+# Topic Modeling
+bertopic
+
+# Optional: Visualization
+matplotlib
