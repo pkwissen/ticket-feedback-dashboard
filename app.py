@@ -151,7 +151,7 @@ if selected_option == "Upload and Process New File":
         display_clickable_summary(topic_counts, df, "topic", "Topic Label", "Ticket Count")
 
         # 4. Analyst Summary
-        st.subheader("4. Analyst who closed the ticket")
+        st.subheader("4. Poor rating for closed ticket each month")
         analyst_df = generate_analyst_summary(df)
         analyst_df = sort_agent_names(analyst_df)
         st.dataframe(analyst_df.reset_index(drop=True), hide_index=True)
@@ -179,7 +179,7 @@ elif selected_option == "View Last Processed Output":
         display_clickable_summary(topic_counts, df, "topic", "Topic Label", "Ticket Count")
 
         # 4. Analyst Summary
-        st.subheader("4. Analyst who closed the ticket")
+        st.subheader("4. Poor rating for closed ticket each month")
         analyst_df = generate_analyst_summary(df)
         analyst_df = sort_agent_names(analyst_df)
         st.dataframe(analyst_df.reset_index(drop=True), hide_index=True)
