@@ -1,7 +1,9 @@
+import matplotlib.pyplot as plt
 import os
 import streamlit as st
 import pandas as pd
 import re
+import plotly.express as px  # For interactive pie charts
 
 from modules.sentiment import classify_sentiment, labels as sentiment_labels
 from modules.topic_modeling import generate_topic_labels
@@ -45,7 +47,7 @@ def build_topic_summary(df):
         df["Topic Label"]
         .value_counts()
         .rename_axis("Topic Label")
-        .reset_index(name="count")
+        .reset_index(name="Ticket Count")
     )
     return topic_counts
 
@@ -55,26 +57,54 @@ def build_category_summary(df):
     else:
         return pd.DataFrame()
 
-def display_clickable_summary(summary_df, full_df, key_prefix, label_column, count_column):
+def display_summary_with_chart(summary_df, full_df, label_column, count_column):
+    """Display table with percentage + interactive pie chart below."""
     if summary_df.empty:
         st.warning(f"No data available for {label_column}")
         return
 
-    st.markdown("**Select a value below to view matching records.**")
-    # Display summary table without index
+    total_tickets = full_df["Ticket No."].nunique() if "Ticket No." in full_df.columns else 0
+    if total_tickets > 0:
+        summary_df["Percentage (%)"] = (summary_df[count_column] / total_tickets * 100).round(2)
+
+    # Show table
     st.dataframe(summary_df.reset_index(drop=True), use_container_width=True, hide_index=True)
+
+    # Plotly interactive pie chart with outside labels & tilt
+    fig = px.pie(
+        summary_df,
+        names=label_column,
+        values=count_column,
+        hole=0.3,
+        title=f"{label_column} Distribution",
+    )
+    fig.update_traces(
+        textinfo="label+percent",
+        textposition="outside",
+        automargin=True,
+        textfont=dict(size=12),
+        pull=[0.05 if val < total_tickets * 0.05 else 0 for val in summary_df[count_column]],  # pull small slices
+    )
+    fig.update_layout(
+        legend_title_text=label_column,
+        height=500,
+        margin=dict(t=50, b=50, l=50, r=50)
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def display_clickable_summary(summary_df, full_df, key_prefix, label_column, count_column):
+    display_summary_with_chart(summary_df, full_df, label_column, count_column)
 
     options = summary_df[label_column].tolist()
     selected = st.selectbox(f"Select {label_column}", options, key=f"{key_prefix}_select")
     if selected:
         st.markdown(f"### 🔍 Records for {label_column}: `{selected}`")
-        # Display filtered records without index
         filtered_df = full_df[full_df[label_column] == selected]
         st.dataframe(filtered_df.reset_index(drop=True), use_container_width=True, hide_index=True)
 
 def sort_agent_names(df, agent_column="Analyst who closed the ticket"):
     df = df.copy()
-    # Extract numeric part for sorting, fallback to -1 if not found
     df["Agent_num"] = df[agent_column].apply(
         lambda x: int(re.search(r'(\d+)$', str(x)).group(1)) if re.search(r'(\d+)$', str(x)) else -1
     )
@@ -87,41 +117,31 @@ if selected_option == "Upload and Process New File":
     uploaded_file = st.file_uploader("Upload Excel File (PoorRatings-Tracker.xlsx)", type=["xlsx"])
     if uploaded_file:
         df = pd.read_excel(uploaded_file, sheet_name="Sheet1")
-        df.columns = df.columns.str.strip()  # Remove leading/trailing spaces
-        df.columns = df.columns.str.replace('\n', ' ')  # Replace newlines with space
-        df.columns = df.columns.str.replace('\r', ' ')  # Replace carriage returns with space
-        df.columns = df.columns.str.title()  # Optional: Title case for consistency
+        df.columns = df.columns.str.strip().str.replace('\n', ' ').str.replace('\r', ' ').str.title()
 
         # 1. Category
         st.subheader("1. Category")
-        st.caption("📌 Classification of user feedback into predefined issue types for analysis.")
         cat_df = build_category_summary(df)
-        st.write("cat_df columns:", cat_df.columns.tolist())
-        st.write("cat_df preview:", cat_df.head())
-
         if not cat_df.empty and "Category" in cat_df.columns and "Ticket Count" in cat_df.columns:
             display_clickable_summary(cat_df, df, "category", "Category", "Ticket Count")
         else:
-            st.warning("No category data available in the uploaded file.")
+            st.warning("No category data available.")
 
         # 2. Sentiments
         st.subheader("2. Sentiments")
-        st.caption("📌 Classification of user feedback based on expressed attitude.")
         sentiment_counts = build_sentiment_summary(df, recompute=True)
         display_clickable_summary(sentiment_counts, df, "sentiment", "Sentiment", "Ticket Count")
 
-        # 3. Topic Labels using BERTopic + LLM
+        # 3. Topic Labels
         st.subheader("3. Topic Labels using BERTopic + LLM")
-        st.caption("📌 Categorization of user feedback into key themes or topics (generated through topic modelling).")
         df = generate_topic_labels(df)
         topic_counts = build_topic_summary(df)
-        display_clickable_summary(topic_counts, df, "topic", "Topic Label", "count")
+        display_clickable_summary(topic_counts, df, "topic", "Topic Label", "Ticket Count")
 
-        # 4. Analyst who closed the ticket
+        # 4. Analyst Summary
         st.subheader("4. Analyst who closed the ticket")
-        st.caption("📌 Monthly ticket statistics for each analyst who closed a ticket.")
         analyst_df = generate_analyst_summary(df)
-        analyst_df = sort_agent_names(analyst_df, agent_column="Analyst who closed the ticket")
+        analyst_df = sort_agent_names(analyst_df)
         st.dataframe(analyst_df.reset_index(drop=True), hide_index=True)
 
         df.to_excel(output_path, index=False)
@@ -130,31 +150,26 @@ if selected_option == "Upload and Process New File":
 elif selected_option == "View Last Processed Output":
     if os.path.exists(output_path):
         df = pd.read_excel(output_path)
-        st.success("📂 Loaded last processed output")
 
         # 1. Category
         st.subheader("1. Category")
-        st.caption("📌 Classification of user feedback into predefined issue types for analysis.")
         cat_df = build_category_summary(df)
         display_clickable_summary(cat_df, df, "category", "Category", "Ticket Count")
 
         # 2. Sentiments
         st.subheader("2. Sentiments")
-        st.caption("📌 Classification of user feedback based on expressed attitude.")
         sentiment_counts = build_sentiment_summary(df, recompute=False)
         display_clickable_summary(sentiment_counts, df, "sentiment", "Sentiment", "Ticket Count")
 
         # 3. Topic Labels
         st.subheader("3. Topic Labels")
-        st.caption("📌 Categorization of user feedback into key themes or topics (generated through topic modelling).")
         topic_counts = build_topic_summary(df)
-        display_clickable_summary(topic_counts, df, "topic", "Topic Label", "count")
+        display_clickable_summary(topic_counts, df, "topic", "Topic Label", "Ticket Count")
 
-        # 4. Analyst who closed the ticket
+        # 4. Analyst Summary
         st.subheader("4. Analyst who closed the ticket")
-        st.caption("📌 Monthly ticket statistics for each analyst who closed a ticket.")
         analyst_df = generate_analyst_summary(df)
-        analyst_df = sort_agent_names(analyst_df, agent_column="Analyst who closed the ticket")
+        analyst_df = sort_agent_names(analyst_df)
         st.dataframe(analyst_df.reset_index(drop=True), hide_index=True)
 
     else:
