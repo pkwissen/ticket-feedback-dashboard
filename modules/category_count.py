@@ -1,7 +1,22 @@
+import pandas as pd
+
+# category_count.py
 def category_wise_count(df):
-    if "Category" not in df.columns:
-        return df
-    # Count tickets per category, keep original column name "Category"
-    counts = df["Category"].value_counts().reset_index()
-    counts.columns = ["Category", "Ticket Count"]  # "Category" stays, add "Ticket Count"
-    return counts
+    def normalize_category(text):
+        if pd.isna(text):
+            return "Unknown"
+        return " ".join(text.strip().title().split())
+
+    if 'Category' not in df.columns:
+        return pd.DataFrame(columns=["Category", "Ticket Count"])
+
+    df['Category'] = df['Category'].apply(normalize_category)
+
+    category_counts = (
+        df['Category']
+        .value_counts()
+        .reset_index()
+    )
+    category_counts.columns = ['Category', 'Ticket Count']
+
+    return category_counts

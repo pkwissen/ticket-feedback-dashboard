@@ -1,9 +1,14 @@
 from transformers import pipeline
 
-# Initialize once
-classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 labels = ["Strong Negative", "Mild Negative", "Actionable", "Unclear"]
 
+# Initialize once
+classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+
 def classify_sentiment(text):
-    result = classifier(text, candidate_labels=labels)
+    # Ensure text is valid
+    if not text or not str(text).strip():
+        return "Unclear"  # default for empty responses
+    
+    result = classifier(str(text), candidate_labels=labels)
     return result["labels"][0]

@@ -105,11 +105,23 @@ def display_clickable_summary(summary_df, full_df, key_prefix, label_column, cou
 
 def sort_agent_names(df, agent_column="Analyst who closed the ticket"):
     df = df.copy()
-    df["Agent_num"] = df[agent_column].apply(
+
+    # Find actual column name ignoring case
+    col_map = {c.strip().lower(): c for c in df.columns}
+    if agent_column.lower() not in col_map:
+        # Column not found, return as-is
+        return df
+
+    real_col = col_map[agent_column.lower()]
+
+    # Extract trailing numbers for sorting, default to -1 if no match
+    df["Agent_num"] = df[real_col].apply(
         lambda x: int(re.search(r'(\d+)$', str(x)).group(1)) if re.search(r'(\d+)$', str(x)) else -1
     )
+
     df = df.sort_values("Agent_num").drop(columns="Agent_num")
     return df
+
 
 if selected_option == "Upload and Process New File":
     st.info("⚠️ Processing may take up to **30 minutes**. Please wait after uploading your file.")

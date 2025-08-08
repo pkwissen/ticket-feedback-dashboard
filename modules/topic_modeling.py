@@ -55,5 +55,6 @@ def generate_topic_labels(df):
         final_labels[topic_id] = improved
 
     df["Improved Topic Label"] = df["Topic ID"].map(final_labels)
-
+    df = df.drop(columns=["Topic Label"])
+    df = df.rename(columns={"Improved Topic Label": "Topic Label"})
     return df
