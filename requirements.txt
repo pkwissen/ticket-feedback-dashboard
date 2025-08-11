@@ -14,6 +14,7 @@ torch
 langchain-community==0.3.21
 # Topic Modeling
 bertopic==0.17.3
+langchain-groq
 
 # Optional: Visualization
 matplotlib
