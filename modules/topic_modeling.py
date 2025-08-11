@@ -1,6 +1,8 @@
+import os
 import pandas as pd
 from bertopic import BERTopic
 from langchain_community.llms import Ollama
+from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 import re
 from tqdm import tqdm
@@ -11,7 +13,6 @@ def clean_label(label):
 
 @st.cache_resource(show_spinner=False)
 def load_bertopic():
-    # Initialize BERTopic once
     return BERTopic(language="english", calculate_probabilities=False, verbose=False)
 
 @st.cache_data(show_spinner=False)
@@ -21,9 +22,17 @@ def run_bertopic(texts):
     new_labels = topic_model.generate_topic_labels(nr_words=3, topic_prefix=False, separator=" | ")
     topic_model.set_topic_labels(new_labels)
     return topics, topic_model
+def get_llm():
+    """Select Ollama locally, else Groq if available."""
+    if os.environ.get("GROQ_API_KEY"):  # Prefer Groq when API key exists
+        print('Using groq')
+        return ChatGroq(model="mixtral-8x7b-32768", api_key=os.environ["GROQ_API_KEY"])
+    else:  # Fallback to local Ollama
+        return Ollama(model="mistral")
 
 @st.cache_data(show_spinner=False)
 def refine_labels_with_llm(unique_labels_df):
+    llm = get_llm()
     prompt_template = PromptTemplate.from_template(
         "You are a helpful assistant. Rewrite the following topic label to make it human-readable "
         "and concise (max 5 words).\n\n"
@@ -35,7 +44,7 @@ def refine_labels_with_llm(unique_labels_df):
         "problem_not_resolved_issue → Unresolved Issue\n\n"
         "Raw: {label}\nImproved:"
     )
-    llm = Ollama(model="mistral")
+
     final_labels = {}
     for _, row in tqdm(unique_labels_df.iterrows(), total=len(unique_labels_df)):
         topic_id = row["Topic ID"]
