@@ -1,99 +1,83 @@
 import os
-import re
-import socket
 import pandas as pd
-from tqdm import tqdm
 from bertopic import BERTopic
-from langchain.prompts import PromptTemplate
-from langchain_community.llms import Ollama
-from langchain_groq import ChatGroq
+from sklearn.feature_extraction.text import CountVectorizer
+from groq import Groq
 
+# =========================
+# BERTopic model runner
+# =========================
+def run_bertopic(texts):
+    """Run BERTopic on given texts and return topics + model."""
+    vectorizer_model = CountVectorizer(stop_words="english")
+    topic_model = BERTopic(vectorizer_model=vectorizer_model, language="english")
+    topics, _ = topic_model.fit_transform(texts)
+    return topics, topic_model
 
-def is_ollama_running(host="127.0.0.1", port=11434, timeout=0.5):
-    """Check if Ollama is running locally."""
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
-
-
-def clean_label(label):
-    """Remove underscores, extra spaces, and lowercase."""
-    return re.sub(r'\s+', ' ', label.replace("_", " ")).strip().lower()
-
-
-def refine_labels_with_llm(unique_labels_df):
+# =========================
+# LLM Refinement (Groq only)
+# =========================
+def refine_labels_with_llm(unique_labels):
     """
-    Refine BERTopic labels using either Ollama locally or Groq on Streamlit Cloud.
+    Use Groq LLM to refine BERTopic topic labels into short, clear names.
+    Expects a DataFrame with 'Topic ID' and 'Topic Label'.
     """
-    prompt_template = PromptTemplate.from_template(
-        "You are a helpful assistant. Rewrite the following topic label to make it "
-        "human-readable and concise (max 5 words).\n\n"
-        "Examples:\n"
-        "ticket_the_was_closed → Closed Ticket\n"
-        "software_the_to_it → Software Upgrade Process\n"
-        "access_to_this_permissions → Permission Access\n"
-        "password_to_the_phone → Phone Password\n"
-        "problem_not_resolved_issue → Unresolved Issue\n\n"
-        "Raw: {label}\nImproved:"
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if not groq_api_key:
+        raise ValueError("GROQ_API_KEY not found in environment variables. Please set it before running.")
+
+    client = Groq(api_key=groq_api_key)
+
+    label_list = "\n".join([f"{row['Topic ID']}: {row['Topic Label']}" for _, row in unique_labels.iterrows()])
+    prompt = (
+        "You are a text classification expert. Here is a list of topic IDs with their current BERTopic labels.\n"
+        "Refine each label into a concise, human-friendly category name.\n"
+        "Return the output strictly in the format:\n"
+        "Topic ID: Refined Label\n\n"
+        f"{label_list}"
     )
 
-    # Choose LLM backend
-    if is_ollama_running():
-        # print("✅ Using local Ollama (mistral)")
-        llm = Ollama(model="mistral", temperature=0)
-    else:
-        # print("☁️ Using Groq (mixtral-8x7b-32768)")
-        groq_key = os.environ.get("GROQ_API_KEY")
-        if not groq_key:
-            raise ValueError("GROQ_API_KEY not found in environment variables.")
-        llm = ChatGroq(
-            model="mixtral-8x7b-32768",
-            api_key=groq_key,
-            temperature=0
-        )
+    response = client.chat.completions.create(
+        model="llama3-70b-8192",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2,
+        max_tokens=500
+    )
 
+    refined_text = response.choices[0].message.content.strip()
     final_labels = {}
-    for _, row in tqdm(unique_labels_df.iterrows(), total=len(unique_labels_df)):
-        topic_id = row["Topic ID"]
-        cleaned = clean_label(row["Topic Label"])
-        prompt = prompt_template.format(label=cleaned)
-        try:
-            improved = llm.invoke(prompt).strip().replace("\n", " ")
-        except Exception as e:
-            print(f"Error refining label for topic {topic_id}: {e}")
-            improved = cleaned
-        final_labels[topic_id] = improved
+    for line in refined_text.split("\n"):
+        if ":" in line:
+            try:
+                topic_id, refined_label = line.split(":", 1)
+                final_labels[int(topic_id.strip())] = refined_label.strip()
+            except ValueError:
+                continue
 
     return final_labels
 
+# =========================
+# Main Topic Label Generator
+# =========================
+def generate_topic_labels(df):
+    """Generate BERTopic topics and LLM-refined labels."""
+    if "User Response" not in df.columns:
+        raise ValueError("Column 'User Response' not found in DataFrame.")
 
-def generate_topic_labels(df, text_column="Feedback"):
-    """
-    Generate BERTopic topics and refined human-readable labels.
-    """
-    if text_column not in df.columns:
-        raise ValueError(f"Column '{text_column}' not found in DataFrame.")
+    # Filter empty or placeholder responses
+    df = df[df["User Response"].notna()]
+    df = df[~df["User Response"].str.strip().str.lower().isin(["", "no comments from the user"])]
 
-    # Fit BERTopic
-    topic_model = BERTopic(language="english", calculate_probabilities=False, verbose=True)
-    topics, _ = topic_model.fit_transform(df[text_column])
+    texts = df["User Response"].tolist()
+    topics, topic_model = run_bertopic(texts)
 
-    # Add topic IDs to df
     df["Topic ID"] = topics
-    df = df[df["Topic ID"] != -1]  # drop outliers
+    df["Topic Label"] = [topic_model.topic_labels_.get(t, "Unknown") for t in topics]
+    df = df[df["Topic ID"] != -1]  # remove outliers
 
-    # Get unique topic labels
-    unique_labels = pd.DataFrame({
-        "Topic ID": df["Topic ID"].unique(),
-        "Topic Label": [topic_model.get_topic(topic)[0][0] for topic in df["Topic ID"].unique()]
-    })
-
-    # Refine labels with LLM
+    unique_labels = df[["Topic ID", "Topic Label"]].drop_duplicates()
     final_labels = refine_labels_with_llm(unique_labels)
 
-    # Map back to DataFrame
-    df["Refined Topic Label"] = df["Topic ID"].map(final_labels)
+    df["Topic Label"] = df["Topic ID"].map(final_labels)
 
     return df

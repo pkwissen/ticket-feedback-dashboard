@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import matplotlib.pyplot as plt
 import os
 import streamlit as st
