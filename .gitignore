@@ -1,21 +1,27 @@
-# Python
+# PyCharm / JetBrains IDE
+.idea/
+*.iml
+
+# Python virtual environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.pkl
+*$py.class
 
-# Environments
-.env
-.venv/
-venv/
-env/
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
 
-# IDE/Editor
-.idea/
-.vscode/
-*.swp
-
-# OS
+# OS-specific files
 .DS_Store
 Thumbs.db
