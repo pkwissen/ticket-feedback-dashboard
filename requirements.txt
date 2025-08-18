@@ -1,11 +1,20 @@
-bertopic==0.17.3
-groq==0.31.0
-numpy==2.3.2
-openpyxl==3.1.5
-pandas==2.3.1
-plotly==6.2.0
-prophet==1.1.7
-python-dotenv==1.1.1
-scikit_learn==1.7.1
-streamlit==1.47.1
+# Core App
+streamlit
+pandas
+numpy
+
+# Excel Support
+openpyxl
+xlsxwriter
+
+# Text Processing & ML
+scikit-learn
 transformers==4.54.1
+torch
+langchain-community==0.3.21
+# Topic Modeling
+bertopic==0.17.3
+langchain-groq
+
+# Optional: Visualization
+matplotlib
