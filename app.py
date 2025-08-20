@@ -99,12 +99,20 @@ def display_summary_with_chart(summary_df, full_df, label_column, count_column):
 def display_clickable_summary(summary_df, full_df, key_prefix, label_column, count_column):
     display_summary_with_chart(summary_df, full_df, label_column, count_column)
 
-    options = summary_df[label_column].tolist()
+    # Add "All" option to the list
+    options = ["All"] + summary_df[label_column].tolist()
     selected = st.selectbox(f"Select {label_column}", options, key=f"{key_prefix}_select")
+
     if selected:
         st.markdown(f"### 🔍 Records for {label_column}: `{selected}`")
-        filtered_df = full_df[full_df[label_column] == selected]
+
+        if selected == "All":
+            filtered_df = full_df
+        else:
+            filtered_df = full_df[full_df[label_column] == selected]
+
         st.dataframe(filtered_df.reset_index(drop=True), use_container_width=True, hide_index=True)
+
 
 def sort_agent_names(df, agent_column="Analyst who closed the ticket"):
     df = df.copy()
@@ -159,6 +167,30 @@ if selected_option == "Upload and Process New File":
         analyst_df = sort_agent_names(analyst_df)
         st.dataframe(analyst_df.reset_index(drop=True), hide_index=True)
 
+        # 5. Analyst Grand Total Filter
+        st.subheader("5. Filter by Analyst Grand Total")
+        merged_df = pd.merge(df, analyst_df, how="left", on="Analyst Who Closed The Ticket")
+
+        if "Grand Total" in merged_df.columns:
+            min_val, max_val = int(merged_df["Grand Total"].min()), int(merged_df["Grand Total"].max())
+
+            st.markdown("#### Click a Grand Total value to filter:")
+            cols = st.columns(6)  # adjust columns per row
+            selected_val = None
+
+            for i, val in enumerate(range(min_val, max_val + 1)):
+                if cols[i % 6].button(str(val), key=f"grand_total_{val}"):
+                    selected_val = val
+
+            if selected_val is not None:
+                filtered_df = merged_df[merged_df["Grand Total"] == selected_val] \
+                    .sort_values(by=["Analyst Who Closed The Ticket", "Grand Total"], ascending=[True, False])
+
+                st.markdown(f"### Showing records with Grand Total = {selected_val}")
+                st.dataframe(filtered_df.reset_index(drop=True), hide_index=True)
+        else:
+            st.warning("⚠️ 'Grand Total' column not found in analyst summary.")
+
         df.to_excel(output_path, index=False)
         # st.success(f"✅ Output saved to `{output_path}`")
 
@@ -187,8 +219,33 @@ elif selected_option == "View Last Processed Output":
         analyst_df = sort_agent_names(analyst_df)
         st.dataframe(analyst_df.reset_index(drop=True), hide_index=True)
 
+        # 5. Analyst Grand Total Filter
+        st.subheader("5. Filter by Analyst Grand Total")
+        merged_df = pd.merge(df, analyst_df, how="left", on="Analyst Who Closed The Ticket")
+
+        if "Grand Total" in merged_df.columns:
+            min_val, max_val = int(merged_df["Grand Total"].min()), int(merged_df["Grand Total"].max())
+
+            st.markdown("#### Click a Grand Total value to filter:")
+            cols = st.columns(6)  # adjust columns per row
+            selected_val = None
+
+            for i, val in enumerate(range(min_val, max_val + 1)):
+                if cols[i % 6].button(str(val), key=f"grand_total_{val}"):
+                    selected_val = val
+
+            if selected_val is not None:
+                filtered_df = merged_df[merged_df["Grand Total"] == selected_val] \
+                    .sort_values(by=["Analyst Who Closed The Ticket", "Grand Total"], ascending=[True, False])
+
+                st.markdown(f"### Showing records with Grand Total = {selected_val}")
+                st.dataframe(filtered_df.reset_index(drop=True), hide_index=True)
+        else:
+            st.warning("⚠️ 'Grand Total' column not found in analyst summary.")
+
     else:
         st.warning("⚠️ No previously processed file found.")
+
 
 else:
     st.info("👇 Please select an option to begin.")
